@@ -23,7 +23,7 @@
 - ***注意***：例如，在 DEVICE_NEEDS_RESET 被设置的情况下，驱动不能假定执行中的请求能够被完成，也不能假定这些请求尚未完成。比较好的方式是，尝试通过发出重置指令来进行恢复。
 
 ### 2.1.2 设备要求：设备状态字段
-- 在 DRIVER_OK 状态有效前，设备***禁止***消耗任何缓冲区数据，或者发送任何 used buffer notification 给驱动。
+- 在 DRIVER_OK 状态有效前，设备***禁止***消耗任何缓冲区数据，或者发送任何 used 缓冲区 notification 给驱动。
 - 当进入错误状态，并且需要重置时，设备***应该***设置 DEVICE_NEEDS_RESET 位。如果设备设置过 DEVICE_NEEDS_RESET，然后又设置了 DRIVER_OK 位，设备***必须***发送一个设备配置更改通知给驱动。
 
 ## 2.2 特性位
@@ -261,40 +261,97 @@ struct virtq_desc {
 - 如果已协商了 VIRTIO_F_IN_ORDER 标志，并且在表中（该表可供设备使用）的偏移 x 处设置了 VRING_DESC_F_NEXT 标志来创建描述符时，驱动***必须***将表中的最后一个描述符的 next 字段设置为 0（其中 x = queue_size - 1），并将其余描述符的 next 字段设置为 x + 1。
 
 #### 2.7.5.3 间接描述符
+- 某些设备通过同时处理大量大型请求而受益。VIRTIO_F_INDIRECT_DESC 特性支持这一功能（请参阅 virtio_queue.h）。为了增加环形缓冲区的容量，驱动可以在内存中的任何位置存储一个间接描述符表，并在主 virtqueue 中插入一个描述符（使用标志 VIRTQ_DESC_F_INDIRECT），该描述符指向包含此间接描述符表的内存缓冲区；addr 和 len 分别表示间接表的地址和字节数（因为这个代码无法编译）。
+- 间接表的布局结构如下（len 是指向此表的描述符的长度，这是一个变量，所以这段代码不会编译）：
+```c
+struct indirect_descriptor_table {
+    /* The actual descriptors (16 bytes each) */
+    struct virtq_desc desc[len / 16];
+};
+```
+- 首个间接描述符，位于间接描述符表的起始位置（索引为 0），更多的间接描述符通过 next 参数组织成链表结构。next 参数无效（flags 中 VIRTQ_DESC_F_NEXT 位无效）的间接描述符，表示描述符链表的尾部。间接描述符表，可以同时包含设备可读和设备可写的描述符。
+- 如果[驱动和设备]协商过 VIRTIO_F_IN_ORDER 特性，间接描述符可以使用有序索引，遵循：索引 0 后面跟着索引 1，然后再跟着索引 2，以此类推。
 
-### 2.7.9 按序消耗descriptor
+##### 2.7.5.3.1 驱动要求：间接描述符
+- 在未协商 VIRTIO_F_INDIRECT_DESC 特性的情况下，驱动***禁止***设置 VIRTQ_DESC_F_INDIRECT 标志。在间接描述符中，驱动***禁止***设置 VIRTQ_DESC_F_INDIRECT [禁止套娃]。
+- 驱动***禁止***创建长度超过设备队列大小的描述符链表。
+- 驱动***禁止***在 flags 中同时设置 VIRTQ_DESC_F_INDIRECT 和 VIRTQ_DESC_F_NEXT 特性。
+- 如果未协商 VIRTIO_F_IN_ORDER 特性，间接描述符***必须***按照次序排列，并且第 1 个描述符[idx == 0]的 next 值设为 1，第 2 个描述符[idx == 1]设为 2，以此类推。
 
-- 一些device通常按照descriptor生成的顺序消耗他们。这些device能够声明VIRTIO_F_IN_ORDER特性。如果该特性（alano：在driver和device之间）协商成功，那么device在通知driver批量buffer的使用情况时，只用填写一个single used ring entry，并把descriptor链表的head entry对应的id填在其中。
-- 然后device根据批量buffer的长度直接跳过。相应的，device也会根据批量buffer的大小，更改used idx的大小。
-- driver需要查看used id，并且计算出batch buffer的大小，以便能够抵达下一个device将要填写的used ring位置。
+##### 2.7.5.3.2 设备要求：间接描述符
+- 设备***必须***忽略描述符中的只写标志（flags&VIRTQ_DESC_F_WRITE）这一项，该标志所指的描述符是针对间接表的。
+- 设备***必须***处理以下情况：0 个或多个常规链式描述符，随后是 1 个带有 flags & VIRTQ_DESC_F_INDIRECT 的单个描述符。
+- ***注意***：虽然这种情况较为罕见（大多数实现,要么仅使用非间接描述符来创建链表，要么使用单个间接元素），但这种布局是有效的。
 
-### 2.7.11 操作 Virtqueues 的辅助工具
+### 2.7.6 虚拟队列可用环形缓冲区
+- 可用环形缓冲区具有以下结构体布局：
+```c
+struct virtq_avail {
+#define VIRTQ_AVAIL_F_NO_INTERRUPT 1
+    le16 flags;
+    le16 idx;
+    le16 ring[ /* Queue Size */ ];
+    le16 used_event; /* Only if VIRTIO_F_EVENT_IDX */
+};
+```
+- 驱动使用可用环形缓冲区，来向设备提供数据缓冲区：每个环形缓冲区条目，指向描述符链表的头部。该环形缓冲区，只能由驱动来写，设备来读。
+- idx 字段，表示驱动将在环形缓冲区中，将下一个描述符条目放置在何处（取模于队列大小）。
+- 该值从 0 开始递增。
+- ***注意***：旧版协议[Virtio PCI Draft]将这个结构体称为 vring_avail，并且将这个常量[上文代码中的 VIRTQ_AVAIL_F_NO_INTERRUPT]称为 VRING_AVAIL_F_NO_INTERRUPT，但是结构体排布和取值都是一样的。
 
-- Linux内核源码中，在 include/uapi/linux/virtio_ring.h 中包含了上述定义，并且提供了更易于使用的辅助例程。这部分代码由 IBM 和 Red Hat 在 BSD 许可证下授权，因此可以在其他项目中自由使用，并且这些代码在 virtio_queue.h 中也重新实现了一份。
+#### 2.7.6.1 驱动要求：虚拟队列的可用环形缓冲区
+- 驱动***禁止***递减虚拟队列上的可用 idx 值（就是说，暴露[给设备]的缓冲区无法撤回）。
 
-### 2.7.12 Virtqueue 如何操作
+### 2.7.7 已使用缓冲区提示抑制
 
-- virtqueue的操作分为两块：（driver）为 device提供新的 available buffer，和 device 处理 used buffer
+#### 驱动要求：已使用缓冲区提示抑制
 
-- 注意：举例来说，最简单的 virtio 网络设备包含了2个 virtqueue：发送端 virtqueue 和接收端 virtqueue。driver 向发送端 virtqueue 发送数据包，这些数据 device 可读，并且在这些数据包用完后清理掉。同样的，接收到的数据包会被添加到接收端的 vritqueue 中，并且等待处理。
+#### 设备要求：已使用缓冲区提示抑制
 
-- 接下来详细描述，这2块操作如何使用 split virtqueue。
+### 2.7.8 虚拟队列已使用环形缓冲区
 
-### 2.7.13 （driver）向 device 提供 buffer
+#### 2.7.8.1 旧版接口：虚拟队列已使用环形缓冲区
 
-- driver按照以下步骤，向 device 的 virtqueue 提供 buffer：
-- 1. driver 将数据 buffer 放置在 descriptor table 的空闲描述符中，并按照需要的方式组织成一个链表（详见 2.7.5 节，virtqueue descriptor table） 。
-- 2. driver 找到 available ring 中的下一个 ring entry，并将描述符链表的头部索引填写进去。
-- 3. 如果要填写的是批量的 buffer，上述步骤 1 和 2 可能需要重复操作。
-- 4. driver 执行适当的内存屏障（Alano：常见的内存保护手段，保证 driver 和 device 端的读写一致），来保证 device 在下一步操作之前，能看到更新过的 descriptor table 和 available ring。
+#### 2.7.8.2 设备要求：虚拟队列已使用环形缓冲区
+
+#### 2.7.8.3 驱动要求：虚拟队列已使用环形缓冲区
+
+### 2.7.9 按序使用描述符
+- 一些设备通常按照描述符生成的顺序使用它们。这些设备能够声明 VIRTIO_F_IN_ORDER 特性。如果该特性[在驱动和设备之间]协商成功，那么设备在通知驱动批量缓冲区的使用情况时，只用填写一个已使用环形缓冲区条目，并把描述符链表的头部条目对应的 id 填在其中。
+- 然后设备根据批量缓冲区的长度直接跳过。相应的，设备也会根据批量缓冲区的大小，更改已使用 idx 的大小。
+- 驱动需要查看已使用 id，并且计算出批量缓冲区的大小，以便能够抵达下一个设备将要填写的已使用环形缓冲区位置。
+- 这将导致已使用环形缓冲区条目，在位置上与批次中的首个可用环形缓冲区条目相匹配，下一个批次的已使用环形缓冲区条目，在位置上与下一个批次中的第一个可用环形缓冲区条目相匹配，依此类推。
+- 未使用的缓冲区（未写入已使用环形缓冲区条目的部分）则假定已被设备完全使用（读取或写入）。
+
+### 2.7.10 可使用缓冲区通知抑制
+
+#### 2.7.10.1 驱动要求：可用缓冲区通知抑制
+
+#### 2.7.10.2 设备要求：可用缓冲区通知抑制
+
+### 2.7.11 操作虚拟队列的辅助工具
+- Linux内核源码中，在 include/uapi/linux/virtio_ring.h 中包含了上述定义，并且提供了更易于使用的辅助例程。这部分代码由 IBM 和 Red Hat 在 BSD 许可证下授权，因此可以在其他项目中自由使用，并且这些代码在 virtio_queue.h 中也重新实现了一份（做了细微改动）。
+
+### 2.7.12 虚拟队列操作
+- 虚拟队列操作分为两块：[驱动]为设备提供新的可用缓冲区，以及[设备]处理已使用缓冲区。
+
+- ***注意***：举例来说，最简单的虚拟 I/O 网络设备包含 2 个虚拟队列：发送虚拟队列和接收虚拟队列。驱动向发送虚拟队列添加数据包（设备可读），并且在用完后清理掉这些数据包。同样的，接收到的数据包（设备可写）会被添加到接收虚拟队列中，并且等待处理。
+- 接下来详细描述，这 2 块操作如何使用分散式虚拟队列。
+
+### 2.7.13 向设备提供缓冲区
+- 驱动按照以下步骤，向 device 的 virtqueue 提供缓冲区：
+- 1. 驱动将缓冲区放置在描述符表的空闲描述符中，并按照需要的方式组织成一个链表（详见 2.7.5 虚拟队列描述符表）。
+- 2. 驱动找到 available ring 中的下一个 ring entry，并将描述符链表的头部索引填写进去。
+- 3. 如果要填写的是批量的缓冲区，上述步骤 1 和 2 可能需要重复操作。
+- 4. 驱动执行适当的内存屏障（Alano：常见的内存保护手段，保证 driver 和 device 端的读写一致），来保证 device 在下一步操作之前，能看到更新过的 descriptor table 和 available ring。
 - 5. available idx 会随着添加到 available ring 中的描述符链表头的数量增加而增加。
-- 6. driver 执行适当的内存屏障，来确保它自己能够在检查 notification suppression 之前，成功更新 idx 域。
-- 7. 如果（driver 和 device之间）未禁用 available buffer notification，那么 driver 会向 device 发送一个这样的 notification 。
-- 需要注意的是：上述步骤没有对 available ring buffer 的溢出覆盖异常采取预防手段：这种情况应该不会发生，因为 ring buffer 的大小和 descriptor table 的大小一直，所以上述步骤（1）就能够防止这种异常发生。
+- 6. 驱动执行适当的内存屏障，来确保它自己能够在检查 notification suppression 之前，成功更新 idx 域。
+- 7. 如果（驱动和设备之间）未禁用 available 缓冲区 notification，那么 driver 会向 device 发送一个这样的 notification 。
+- 需要注意的是：上述步骤没有对 available ring 缓冲区的溢出覆盖异常采取预防手段：这种情况应该不会发生，因为 ring 缓冲区的大小和 descriptor table 的大小一直，所以上述步骤（1）就能够防止这种异常发生。
 - 另外：最大的 queue size 是 32768（16 bit 数据里面，最大的 2 的 n 次幂）（Alano：2^15）。
 - 接下来详细说说，上述的每一个步骤有什么要求。
 
-#### 2.7.13.1 将 buffer 添加到 descriptor table 中
+#### 2.7.13.1 将缓冲区添加到 descriptor table 中
 
 #### 2.7.13.2 更新 available ring
 
@@ -306,10 +363,10 @@ struct virtq_desc {
 
 ##### 2.7.13.4.1 （driver）通知 device，对 driver 有什么要求
 
-### 2.7.14 （driver）从 device 接收 used buffer
+### 2.7.14 （driver）从 device 接收 used 缓冲区
 
-- 一旦 device 处理完 descriptor 描述的 buffer 数据后，device 会按照章节 2.7.7 中描述的方式，发送一个 used buffer notification。
-- 注意：出于性能考虑，处理 used buffer ring时，driver *也许* 会禁用 used buffer notification。但同时我们也要注意到，在清空 ring 和重新使能 notification 的间隙，可能会出现 norification 丢失的问题。这个问题可以通过，在重新启用 notification 后，重新检查 used buffer 的方式来解决：
+- 一旦 device 处理完 descriptor 描述的缓冲区数据后，device 会按照章节 2.7.7 中描述的方式，发送一个 used 缓冲区 notification。
+- 注意：出于性能考虑，处理 used 缓冲区 ring时，driver *也许* 会禁用 used 缓冲区 notification。但同时我们也要注意到，在清空 ring 和重新使能 notification 的间隙，可能会出现 norification 丢失的问题。这个问题可以通过，在重新启用 notification 后，重新检查 used 缓冲区的方式来解决：
 
 ```c
 virtq_disable_used_buffer_notifications(vq);
@@ -346,9 +403,9 @@ for (;;) {
 - 3. Element Length
 - 4. Flags
 
-- buffer 包含 0 个或者更多的 device 可读的，物理连续（Alano：就是物理地址连续）的元素，并且这些元素后面紧跟着 0 个或者更多的物理连续的 device 可写的元素。（每个 buffer 至少包含一个元素）
-- 当 driver 想把这样一个 buffer 发送给 device 的时候，driver 会向 descriptor ring 中，写入至少 1 个 available descriptor，这个 descriptor 会填写该 buffer 的描述元素。这个 descriptor 会通过自己保存 Buffer ID 的方式，将自己和对应的 buffer 绑定在一起。
-- 然后 driver 会通知 device。当处理完这个 buffer 之后，device 会向 descriptor ring 中写入 1 个 used device descriptor，并把 Buffer ID 填进这个 descriptor 中，然后再发送一个 used event notification。
+- 缓冲区包含 0 个或者更多的 device 可读的，物理连续（Alano：就是物理地址连续）的元素，并且这些元素后面紧跟着 0 个或者更多的物理连续的 device 可写的元素。（每个缓冲区至少包含一个元素）
+- 当 driver 想把这样一个缓冲区发送给 device 的时候，driver 会向 descriptor ring 中，写入至少 1 个 available descriptor，这个 descriptor 会填写该缓冲区的描述元素。这个 descriptor 会通过自己保存 Buffer ID 的方式，将自己和对应的缓冲区绑定在一起。
+- 然后 driver 会通知 device。当处理完这个缓冲区之后，device 会向 descriptor ring 中写入 1 个 used device descriptor，并把 Buffer ID 填进这个 descriptor 中，然后再发送一个 used event notification。
 - descriptor ring 通过回环的方式工作：driver 按次序写入 descriptor。在写到 ring 的尾部之后，下一个 descriptor 又被写到 ring 的头部。一旦 ring 被写满了，driver 就停止发送新的请求，然后等待 device 处理 descriptor，并把 descriptor 标记成 used 状态，driver 就又能获得新的 descriptor 使用。
 - 同样的，device 按顺序从 ring 中读取 descriptor，同时侦测 descriptor 是否被标记成 available 状态。等处理完 descriptor 之后，device 又会将 used descriptor 写回到 ring 中。
 - 注意：在 device 读取到 driver 提供的 descriptor时，device 可能不会按原来的顺序处理这些 descriptor。当 device 写 used descriptor 时，它会严格按照自己完成的顺序去写。
