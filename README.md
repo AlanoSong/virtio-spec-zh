@@ -85,9 +85,9 @@
   - [3.3 设备清理](./doc/chapter-03.md#33-设备清理)
     - [3.3.1 驱动要求：设备清理](./doc/chapter-03.md#331-驱动要求设备清理)
 
-- [4 virtio 传输选项](./doc/chapter-04.md#4-virtio-传输选项)
-  - [4.1 PCI 总线上的 virtio](./doc/chapter-04.md#41-pci-总线上的-virtio)
-    - [4.1.1 设备要求：PCI 总线上的 virtio](./doc/chapter-04.md#411-设备要求pci-总线上的-virtio)
+- [4 虚拟 I/O 传输选项](./doc/chapter-04.md#4-虚拟-io-传输选项)
+  - [4.1 基于 PCI 总线的虚拟 I/O](./doc/chapter-04.md#41-基于-pci-总线的-虚拟-io)
+    - [4.1.1 设备要求：PCI 总线上的虚拟 I/O](./doc/chapter-04.md#411-设备要求pci-总线上的-虚拟-io)
     - [4.1.2 PCI 设备识别](./doc/chapter-04.md#412-pci-设备识别)
       - [4.1.2.1 设备要求：PCI 设备识别](./doc/chapter-04.md#4121-设备要求pci-设备识别)
       - [4.1.2.2 驱动要求：PCI 设备识别](./doc/chapter-04.md#4122-驱动要求pci-设备识别)
@@ -95,7 +95,7 @@
     - [4.1.3 PCI 设备布局](./doc/chapter-04.md#413-pci-设备布局)
       - [4.1.3.1 驱动要求：PCI 设备布局](./doc/chapter-04.md#4131-驱动要求pci-设备布局)
       - [4.1.3.2 设备要求：PCI 设备布局](./doc/chapter-04.md#4132-设备要求pci-设备布局)
-    - [4.1.4 virtio 结构 PCI 功能](./doc/chapter-04.md#414-virtio-结构-pci-功能)
+    - [4.1.4 虚拟 I/O 结构 PCI 功能](./doc/chapter-04.md#414-虚拟-io-结构-pci-功能)
 
 - [5 设备类型](./doc/chapter-05.md#5-设备类型)
   - [5.7 GPU 设备](./doc/chapter-05.md#57-gpu-设备)
