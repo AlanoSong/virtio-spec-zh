@@ -7,7 +7,7 @@
 - *省略*
 
 ## 1.3 术语
-- 本文件中的关键词“必须”（MUST）、“不能”（MUST NOT）、“必需”（REQUIRED）、“应”（SHALL）、“禁止”（SHALL NOT）、“应该”（SHOULD）、“不应该”（SHOULD NOT）、“建议”（RECOMMENDED）、“不建议”（NOT RECOMMENDED）、“可以”（MAY）以及“可选”（OPTIONAL），只有在以全大写字母形式出现时，才应按照 [RFC2119] 和 [RFC8174] 中所述的含义来理解。
+- 本文件中的关键词“必须”（MUST）、“禁止”（MUST NOT）、“必需”（REQUIRED）、“应”（SHALL）、“不应”（SHALL NOT）、“应该”（SHOULD）、“不应该”（SHOULD NOT）、“建议”（RECOMMENDED）、“不建议”（NOT RECOMMENDED）、“可以”（MAY）以及“可选”（OPTIONAL），只有在以全大写字母形式出现时，才应按照 [RFC2119] 和 [RFC8174] 中所述的含义来理解。
 
 ### 1.3.1 旧版接口：术语
 - 在本规范 1.0 版本之前的规范草案（例如，参见[虚拟机 PCI 草案]）定义了驱动与设备之间类似但不同的接口。由于这些接口已被广泛采用，因此本规范包含了***可选***功能，以简化从这些旧版草案接口的过渡。

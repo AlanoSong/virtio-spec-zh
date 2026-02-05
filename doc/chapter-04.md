@@ -75,3 +75,107 @@ struct virtio_pci_cap {
 - 1. ***cap_vndr*** 0x09；表明厂商特定的功能。
 - 2. ***cap_next*** 链接到 PCI 配置空间中，功能链表的下一个功能。
 - 3. ***cap_len*** 该功能结构体的长度，包含 virtio_pci_cap 结构体的整个部分，如果有额外数据的话，也包含额外数据的长度。该长度***可以***包含填充字节，或者驱动未使用的字段。
+- 4. ***cfg_type*** 表示结构体类型，依据以下表格：
+```c
+/* Common configuration */
+#define VIRTIO_PCI_CAP_COMMON_CFG 1
+/* Notifications */
+#define VIRTIO_PCI_CAP_NOTIFY_CFG 2
+/* ISR Status */
+#define VIRTIO_PCI_CAP_ISR_CFG 3
+/* Device specific configuration */
+#define VIRTIO_PCI_CAP_DEVICE_CFG 4
+/* PCI configuration access */
+#define VIRTIO_PCI_CAP_PCI_CFG 5
+/* Shared memory region */
+#define VIRTIO_PCI_CAP_SHARED_MEMORY_CFG 8
+/* Vendor-specific data */
+#define VIRTIO_PCI_CAP_VENDOR_CFG 9
+```
+> 任何其他值保留给未来使用。
+
+> 每种结构体后面会分别详细描述。
+
+> 对于任何种类型，设备***可以***提供多个结构体[来描述] - 这使得设备可以暴露多个接口给驱动。能力列表中各项能力的排列顺序，反映了该设备所建议的优先级顺序。设备可以规定，若要使用 id 字段，则应优先采用该机制来执行排序操作。
+
+> ***注意***：例如，在某些虚拟机管理程序中，使用 I/O 访问进行的通知，比使用内存访问进行的通知速度更快。在这种情况下，该设备会以 cfg_type 设置为 VIRTIO_PCI_CAP_NOTIFY_CFG 的方式公开两种功能：第一种功能针对 I/O BAR，第二种功能针对内存 BAR。在这个例子中，如果存在 I/O 资源，驱动程序将使用 I/O BAR；而当 I/O 资源不可用时，则会回退使用内存 BAR。
+
+- 5. ***id*** 某些设备，会使用该字段来唯一标识特定类型的各种功能。若设备类型未明确此字段的含义，则其内容无效。
+- 6. ***offset*** 指明了该结构相对于基地址（与 BAR 相关联的基地址）的起始位置。各结构部分中均列出了 offset 的对齐要求。
+- 7. ***length*** 指明了结构体的长度。
+> length ***可以***包含填充字节，或者驱动未使用的字段，或者未来的拓展字段。
+> ***注意***：例如，未来的设备，可能会拥有数兆字节的大型结构数据。而当前的设备从未使用过超过 4K 字节大小的结构，因此驱动可能将映射的结构大小限制为例如 4K 字节（从而忽略结构中超过 4K 字节的部分），以便在不丧失功能且不浪费资源的情况下，与这类设备实现向前兼容性。
+- 该类型的变体，结构体 virtio_pci_cap64，正是为了偏移或者长度超过 4GiB 的场景而定义的：
+```c
+struct virtio_pci_cap64 {
+    struct virtio_pci_cap cap;
+    u32 offset_hi;
+    u32 length_hi;
+};
+```
+- 已知 cap.length 和 cap.offset 字段仅仅只有 32 位，额外的 offset_hi 和 length_hi 字段提供了高 32 位，组合在一起就是 64 位，能够满足 offset 和 length 为 64 为位的场景。
+
+#### 4.1.4.1 驱动要求：虚拟 I/O 结构 PCI 功能
+- 驱动***必须***忽略任何具有保留的 cfg_type 值的特定厂商功能结构。
+- 驱动***应该***使用它们能够支持的每个虚拟 I/O 结构类型的首个实例。
+- 驱动***必须***接受大于此处指定的 cap_len 值的值。
+- 驱动***必须***忽略任何具有保留 bar 值的特定厂商功能结构。
+- 驱动***应该***仅映射足够大的配置结构部分以供设备操作使用。驱动***必须***处理意外过长的长度，但可以检查该长度是否足够用于设备操作。
+- 驱动***禁止***向能功能结构的任何字段写入数据，但 4.1.4.9.2 中详细说明的那些具有 cap_type VIRTIO_PCI_CAP_PCI_CFG 的字段除外。
+
+#### 4.1.4.2 设备要求：虚拟 I/O 结构 PCI 功能
+- 设备***必须***将任何额外数据（从 cap_vndr 字段开头，一直到额外数据字段的末尾（如果有））包含在 cap_len 中。设备***可以***为超出此范围的任何结构附加额外数据或填充字节。
+- 如果该设备呈现相同类型的多个结构，它***应当***按照最优（首先）到最差（最后）的顺序对它们进行排序。
+
+#### 4.1.4.3 通用配置结构布局
+- 可以通过 VIRTIO_PCI_CAP_COMMON_CFG 中的 bar 和 offset 值，来定位通用配置结构体的位置；它的布局如下所示。
+```c
+struct virtio_pci_common_cfg {
+    /* About the whole device. */
+    le32 device_feature_select; /* read-write */
+    le32 device_feature; /* read-only for driver */
+    le32 driver_feature_select; /* read-write */
+    le32 driver_feature; /* read-write */
+    le16 config_msix_vector; /* read-write */
+    le16 num_queues; /* read-only for driver */
+    u8 device_status; /* read-write */
+    u8 config_generation; /* read-only for driver */
+    /* About a specific virtqueue. */
+    le16 queue_select; /* read-write */
+    le16 queue_size; /* read-write */
+    le16 queue_msix_vector; /* read-write */
+    le16 queue_enable; /* read-write */
+    le16 queue_notify_off; /* read-only for driver */
+    le64 queue_desc; /* read-write */
+    le64 queue_driver; /* read-write */
+    le64 queue_device; /* read-write */
+    le16 queue_notif_config_data; /* read-only for driver */
+    le16 queue_reset; /* read-write */
+    /* About the administration virtqueue. */
+    le16 admin_queue_index; /* read-only for driver */
+    le16 admin_queue_num; /* read-only for driver */
+};
+```
+- 1. device_feature_select 驱动使用该值，来选择显示 device_feature 的哪些特性位。值 0x0 选择 0 到 31 位的特征位，0x1 选择 32 到 63 位的特征位，依此类推。
+- 2. device_feature 设备使用该值，向驱动报告它提供的特征位：驱动通过写入 device_feature_select 来选择要呈现的特征位。
+- 3. driver_feature_select 驱动使用该值，来选择显示 driver_feature 的哪些特征位。值 0x0 选择 0 到 31 位的特征位，0x1 选择 32 到 63 位的特征位，依此类推。
+- 4. driver_feature 驱动将此值写入，以接受设备提供的特征位。由 driver_feature_select 选择的驱动特征位。
+- 5. config_msix_vector 由驱动设置为配置更改通知的 MSI-X 向量。
+- 6. num_queues 设备在此处，指定支持的最大虚拟队列数。如果支持任何管理虚拟队列，则将排除这些队列。
+- 7. device_status 驱动在此处写入设备状态（请参阅 2.1）。将此字段写入 0 可以重置设备。
+- 8. config_generation 配置原子性值。每次配置发生明显变化时，设备都会更改此值。
+- 9. queue_select 队列选择。驱动选择下一个字段[queue_size]指的是哪一个虚拟队列。
+- 10. queue_size 队列大小。在重置时，该值指定设备支持的最大队列大小。该值可由驱动修改以减少内存需求。值为 0 表示该队列不可用。
+- 11. queue_msix_vector 由驱动设置为虚拟队列通知的 MSI-X 向量。
+- 12. queue_enable 驱动使用此值来选择性地阻止设备执行来自此虚拟队列的请求。1 - 启用；0 - 禁用。
+- 13. queue_notify_off 驱动读取此值，以计算此虚拟队列在通知结构起始位置的偏移量。
+> 注意：这不是字节偏移量。请参阅下文 4.1.4.4。
+- 14. queue_desc 驱动在此处写入描述符区域的物理地址。请参阅第 2.6 节。
+- 15. queue_driver 驱动在此处写入驱动区域的物理地址。请参阅第 2.6 节。
+- 16. queue_device 驱动在此处写入设备区域的物理地址。请参阅第 2.6 节。
+- 17. queue_notif_config_data 仅当[驱动和设备]协商过 VIRTIO_F_NOTIF_CONFIG_DATA 时才存在。驱动在向设备发送可用缓冲通知时将使用此值。请参阅第 4.1.5.2 节。
+> 注意：此字段为设备提供了灵活性，以便其在可用缓冲通知中确定如何引用虚拟队列。在简单的情况下，设备可以将 queue_notif_config_data 设置为虚拟队列索引。某些设备可能会受益于提供其他值，例如，内部虚拟队列标识符，或与虚拟队列索引相关的内部偏移量。
+> 注意：此字段之前被称为 queue_notify_data。
+- 18. queue_reset 驱动使用此功能来有选择地重置队列。只有在已协商 VIRTIO_F_RING_RESET 时，此字段才会存在。（请参阅 2.6.1）。
+- 19. admin_queue_index 设备使用此功能来报告第一个管理虚拟队列的索引。这个字段，只有在 VIRTIO_F_ADMIN_VQ 已达成协商的情况下才有效。
+- 20. admin_queue_num 设备利用此值来报告所支持的管理虚拟队列的数量。具有索引在 dmin_queue_index 和 （admin_queue_index + admin_queue_num - 1）之间（包括这两个值）的虚拟队列，将作为管理虚拟队列使用。值为 0 表示没有支持的管理虚拟队列。只有在 IRTIO_F_ADMIN_VQ 已达成协商的情况下，此字段才有效。
