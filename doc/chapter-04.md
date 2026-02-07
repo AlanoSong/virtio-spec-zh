@@ -179,3 +179,46 @@ struct virtio_pci_common_cfg {
 - 18. queue_reset 驱动使用此功能来有选择地重置队列。只有在已协商 VIRTIO_F_RING_RESET 时，此字段才会存在。（请参阅 2.6.1）。
 - 19. admin_queue_index 设备使用此功能来报告第一个管理虚拟队列的索引。这个字段，只有在 VIRTIO_F_ADMIN_VQ 已达成协商的情况下才有效。
 - 20. admin_queue_num 设备利用此值来报告所支持的管理虚拟队列的数量。具有索引在 dmin_queue_index 和 （admin_queue_index + admin_queue_num - 1）之间（包括这两个值）的虚拟队列，将作为管理虚拟队列使用。值为 0 表示没有支持的管理虚拟队列。只有在 IRTIO_F_ADMIN_VQ 已达成协商的情况下，此字段才有效。
+
+##### 4.1.4.3.1 设备要求：通用配置结构布局
+- *offset* ***必须***是 4 字节对齐的。
+- 设备**必须**具备至少一种通用的配置功能。
+- 该设备**必须**在 *device_feature* 中展示其所能提供的功能位，从 *device_feature_select* * 32 的位置开始（对于由驱动编写的任何 *device_feature_select* 值）
+- **注意**：这意味着对于除 0 或 1 以外的任何设备功能选择选项，它都将显示为 0，因为此处定义的所有功能的数值都不超过 63。
+- 设备**必须**按照以下顺序显示驱动在 *driver_feature* 中所写入的任何有效特性位：从 *driver_feature_select* * 32 开始的位（对于驱动所写的 *driver_feature_select*）。有效的特性位，是那些是对应 *device_feature* 的子集。设备**可以**显示驱动所写入的无效位。
+- **注意**：这意味着设备可以忽略那些它从未提供过的功能位的写入操作，并在读取时直接返回 0 。或者，它也可以直接复制驱动所写入的内容（但在驱动程序设置 FEATURES_OK 标志时，它仍需进行检查）。
+- **注意**：无论如何，驱动不应该写入无效位，如 3.1.1 所述。
+- 在驱动读取到一个设备特定配置值（该值自设备特定配置的任何部分上次被读取以来已发生更改）之后，设备**必须**显示 *config_generation* 有所变化。
+- **注意**：由于 config_generation 是一个 8 位值，每次配置更改时，简单地对其进行递增操作可能会因循环覆盖而违反此要求。更好的做法是在其发生变化时设置一个内部标志，如果在驱动从设备特定配置中读取时该标志已设置，则对 config_generation 进行递增操作并清除该标志。
+- 当 0 被写入 *device_status* 时，设备**必须**重置，并且一旦重置完成，就在 *device_status* 中写入 0。
+- 当重置时，设备必须在 *queue_enable* 中写入 0。
+- 如果已经协商过 VIRTIO_F_RING_RESET，设备**必须**在重置时，向 *queue_reset* 中写入 0。
+- 如果已经协商过 VIRTIO_F_RING_RESET，在虚拟队列已经用 *queue_enable* 使能之后，设备**必须**向 *queue_reset* 写入 0。
+- 当 1 被写入 *queue_reset* 时，设备**必须**重置队列。只要队列重置还在进行，设备**必须**继续向 *queue_reset* 写入 1。当队列重置完成时，设备**必须**同时向 *queue_reset* 和 *queue_enable* 写入 0。
+- 如果与当前队列选择对应的虚拟队列不可用，则设备的 *queue_size* 字段**必须**为 0 。
+- 如果 VIRTIO_F_RING_PACKED 未被协商，设备**必须**向 *queue_size* 写入 0 或者 2^n。
+- 如果已经协商过 VIRTIO_F_ADMIN_VQ，则值 admin_queue_index **必须**等于或大于 num_queues；同时，admin_queue_num **必须**小于或等于 0x10000 - admin_queue_index，以确保有效管理队列的索引能够处于一个 16 位范围内，且该范围要大于所有其他虚拟队列的范围。
+
+##### 4.1.4.3.2 驱动要求：通用配置结构布局
+- 驱动**禁止**写入 device_feature、num_queues、config_generation、queue_notify_off 或 queue_notif_config_data。
+- 如果已经协商过 VIRTIO_F_RING_PACKED，驱动**禁止**将 queue_size 的值设为 0。如果未协商 VIRTIO_F_RING_PACKED，驱动**禁止**将 queue_size 的值设为非 2^n 的值。
+- 驱动**必须**在启用 virtqueue 之前先配置其他 virtqueue 字段，然后使用 queue_enable 来启用它。
+- 在将 device_status 的值设为 0 之后，驱动**必须**等待对 device_status 的读取返回 0 之后再重新初始化设备。
+- 驱动**禁止**将 0 写入 *queue_enable* 字段。
+- 如果已经协商过 VIRTIO_F_RING_RESET，那么在驱动将 1 写入 *queue_reset* 字段以重置队列之后，驱动**必须**在读取回 0 的 *queue_reset* 值之后，才认为队列重置已完成。驱动**可以**在确保其他虚拟队列字段已正确设置后，通过将 1 写入 *queue_enable* 字段来重新启用队列。驱动还**可以**将驱动可写入的队列配置值，设置为与队列重置之前使用的值不同的值（请参阅 2.6.1）。
+- 如果已经协商过 VIRTIO_F_ADMIN_VQ，并且驱动配置了任何管理虚拟队列，驱动**必须**使用范围在 admin_queue_index 到 admin_queue_index + admin_queue_num - 1（包括这两个值）内的索引来配置管理虚拟队列。驱动可以配置的管理虚拟队列数量**可以**少于设备支持的数量。
+
+#### 4.1.4.4 通知结构布局
+- 通知的位置，是通过 VIRTIO_PCI_CAP_NOTIFY_CFG 字段找到的。该字段后面紧跟着一个附加字段，像这样：
+```c
+    struct virtio_pci_notify_cap {
+    struct virtio_pci_cap cap;
+    le32 notify_off_multiplier; /* Multiplier for queue_notify_off. */
+};
+```
+- *notify_off_multiplier* 和 *queue_notify_off* 结合使用，能够得到 BAR 内给一个虚拟队列使用的队列通知地址：
+```c
+    cap.offset + queue_notify_off * notify_off_multiplier
+```
+- [上述公式中的] *cap.offset* 和 *notify_off_multiplier* 是从前文的通知功能结构中[virtio_pci_notify_cap]取得的，以及 *queue_notify_off* 是从通用配置结构中获得的。
+- **注意**：例如，如果 *notifier_off_multiplier* 值是 0，对于所有队列，设备使用相同的队列通知地址。
