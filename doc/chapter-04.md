@@ -222,3 +222,24 @@ struct virtio_pci_common_cfg {
 ```
 - [上述公式中的] *cap.offset* 和 *notify_off_multiplier* 是从前文的通知功能结构中[virtio_pci_notify_cap]取得的，以及 *queue_notify_off* 是从通用配置结构中获得的。
 - **注意**：例如，如果 *notifier_off_multiplier* 值是 0，对于所有队列，设备使用相同的队列通知地址。
+
+##### 4.1.4.4.1 设备要求：通知功能
+- 设备**必须**具备至少一种通知功能。
+- 对于没有提供 VIRTIO_F_NOTIFICATION_DATA [能力]的设备：
+- 1. *cap.offset* 必须是 2 字节对齐。
+- 2. 设备**必须**：要么将 *notify_off_multiplier* 设为 2 的偶数次幂；要么将 *notify_off_mutiplier* 设为 0。
+- 3. 设备给定的 *cap.length* **必须**至少为 2，并且必须足够大，以能够支持所有可能配置下所有支持的队列的队列通知偏移量。
+- 对于所有的队列，设备给定的 *cap.length* 值必须满足：
+```c
+    cap.length >= queue_notify_off * notify_off_multiplier + 2
+```
+- 对于提供 VIRTIO_F_NOTIFICATION_DATA [能力]的设备：
+- 1. 设备**必须**：要么将 notify_off_multiplier 给定为一个 2 的幂次方，且也是 4 的倍数的数值；要么将其表示为 0。
+- 2. *cap.offset* **必须**是 4 字节对齐的。
+- 3. 设备给定的 *cap.length* 值**必须**至少为 4，并且**必须**足够大，以支持所有支持的队列在所有可能配置下的队列通知偏移量。
+- 对于所有队列，设备给定的 *cap.length* 的值**必须**满足：
+```c
+    cap.length >= queue_notify_off * notify_off_multiplier + 4
+```
+
+#### 4.1.4.5 ISR 状态功能
