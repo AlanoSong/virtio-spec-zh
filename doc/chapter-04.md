@@ -269,3 +269,46 @@ struct virtio_pci_common_cfg {
 
 ##### 4.1.4.6.1 设备要求：设备特定配置
 - 设备特定配置相关的*offset*，**必须**是 4 字节对齐。
+
+#### 4.1.4.7 共享内存功能
+- 共享内存区域（章节 2.10）在 PCI 传输中，被作为一系列的 VIRTIO_PCI_CAP_SHARED_MEMORY_CFG 功能进行枚举，每个区域对应一个功能。
+- 该功能由结构体 virtio_pci_cap64 定义，并利用 cap.id，来允许每个设备拥有多个共享内存区域。cap.id 中的标识符并不表示特定的优先顺序；它只是用于唯一标识一个区域。
+
+##### 4.1.4.7.1 设备要求：共享内存功能
+- 由 *cap.offset*、*offset_hi*、*cap.length* 和 *length_hi* 字段组合所定义的区域，**必须**完全包含在由 cap.bar 指定的 BAR 内部。
+- *cap.id* 对于任何一个设备实例而言，都**必须**是唯一的。
+
+#### 4.1.4.8 厂商数据功能
+- 可选的厂商数据功能，使设备能够向驱动提供厂商特定的数据，且不会产生冲突，用于调试和/或报告目的，并且不会与标准功能发生冲突。
+- 此功能是对标准子系统 ID 和子系统厂商 ID 字段（PCI 配置空间头中的偏移量 0x2C 和 0x2E）的补充，而非替代，这些字段由 [PCI] 规定。
+- 厂商数据功能在 PCI 传输中被列为 IRTIO_PCI_CAP_VENDOR_CFG 功能。
+- 该功能具有以下结构体：
+```c
+struct virtio_pci_vndr_data {
+    u8 cap_vndr; /* Generic PCI field: PCI_CAP_ID_VNDR */
+    u8 cap_next; /* Generic PCI field: next ptr. */
+    u8 cap_len; /* Generic PCI field: capability length */
+    u8 cfg_type; /* Identifies the structure. */
+    u16 vendor_id; /* Identifies the vendor-specific format. */
+    /* For Vendor Definition */
+    /* Pads structure to a multiple of 4 bytes */
+    /* Reads must not have side effects */
+};
+```
+- 其中 *vendor_id* 标识 PCI 协议中 PCI-SIG 指定的**厂商 ID**
+- 要注意，功能长度要求是 4 的倍数。
+- 为了使通用驱动安全地访问该功能，读取该功能**禁止**产生任何副作用。
+
+##### 4.1.4.8.1 设备要求：厂商数据功能
+- 设备**可以**提供与 PCI 厂商 ID 或 PCI 子系统厂商 ID 不匹配的 *vendor_id*。
+- 设备**可以**提供具有不同或相同 *vendor_id* 值的多个厂商数据功能。
+- 厂商 ID 值**禁止**等于 0x1AF4。
+- 厂商数据功能的大小，**必须**是 4 字节的倍数。
+- 驱动对厂商数据功能的读取操作，**禁止**产生任何副作用。
+
+##### 4.1.4.8.2 驱动要求：厂商数据功能
+- 除了调试和上报目的外，驱动**不应该**使用厂商数据功能。
+- 在写入厂商数据功能前，驱动**必须**验证 *vendor_id*。
+
+#### 4.1.4.9 PCI 配置访问功能
+- VIRTIO_PCI_CAP_PCI_CFG 特性，创建了一种替代性的（并且可能并非最优的）访问方式，用于访问常见的配置、通知、中断服务请求以及设备特定的配置区域。
