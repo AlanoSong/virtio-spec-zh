@@ -353,5 +353,92 @@ struct virtio_pci_cfg_cap {
 
 ###### 4.1.5.1.1.1 旧版接口：设备布局检测注意事项
 
-##### 4.1.5.2 MSI-X 向量配置
+##### 4.1.5.1.2 MSI-X 向量配置
+- 当设备上具备并且使能了 MSI-X 功能（通过标准 PCI 配置空间）时，会使用 *config_msix_vector* 和 *queue_msix_vector* 来将配置更改和队列中断映射到 MSI-X 向量上。在这种情况下，ISR 状态将不会被使用。
+- 向 *config_msix_vector/queue_msix_vector* 中写入有效的 MSI-X 表条目编号（0 到 0x7FF），可将由配置更改/选定队列事件触发的中断分别映射到相应的 MSI-X 向量。若要禁用某一事件类型的中断，驱动可通过写入特殊的 NO_VECTOR 值来取消对该事件的映射：
+```c
+/* Vector value used to disable MSI for queue */
+#define VIRTIO_MSI_NO_VECTOR 0xffff
+```
+- 要注意，映射一个事件到向量，可能需要设备去分配内部的设备资源，并且这可能会失败。
 
+###### 4.1.5.1.2.1 设备要求：MSI-X 向量配置
+
+###### 4.1.5.1.2.2 驱动要求：MSI-X 向量配置
+
+##### 4.1.5.1.3 虚拟队列配置
+- 由于一个设备可以有零个或多个用于批量数据传输的虚拟队列，因此驱动需要将其作为设备特定配置的一部分进行设置。
+- 驱动通常会按照以下方式，为设备所拥有的每个虚拟队列进行配置：
+- 1. 将虚拟队列索引写入 *queue_select*。
+- 2. 从 *queue_size* 字段读取虚拟队列的大小。这决定了虚拟队列的大小（请参阅 2.6 节 虚拟队列）。
+如果此字段值为 0，则表示不存在该虚拟队列。
+- 3. 可选的情况下，选择一个较小的虚拟队列大小，并将其写入 *queue_size* 字段。
+- 4. 在连续的物理内存中，为虚拟队列分配并初始化描述符表、可用和已用环形缓冲区。
+- 5. 可选地，如果设备上存在并启用了 MSI-X 功能，则选择一个向量来用于请求由虚拟队列事件触发的中断。将与该向量相对应的 MSI-X 表条目编号写入 *queue_msix_vector* 中。读取 *queue_msix_vector*：如果成功，将之前写入的值返回；如果失败，则返回 NO_VECTOR 值。
+
+###### 4.1.5.1.3.1 旧版接口：虚拟队列配置注意事项
+
+#### 4.1.5.2 可用缓冲区通知
+- 当 VIRTIO_F_NOTIFICATION_DATA 未被协商时，驱动会通过向虚拟队列的 队列通知地址写入仅包含 16 位通知值的方式，向设备发送可用缓冲区通知。
+- 通知值依赖于 VIRTIO_F_NOTIF_CONFIG_DATA 的协商结果。
+- 如果 VIRTIO_F_NOTIFICATION_DATA 已经协商过，驱动会通过向 队列通知地址写入以下 32 位值来向设备发送可用缓冲区通知：
+```c
+le32 {
+    union {
+        vq_index: 16; /* Used if VIRTIO_F_NOTIF_CONFIG_DATA not negotiated */
+        vq_notif_config_data: 16; /* Used if VIRTIO_F_NOTIF_CONFIG_DATA negotiated */
+    };
+    next_off : 15;
+    next_wrap : 1;
+};
+```
+- 1. 当 VIRTIO_F_NOTIF_CONFIG_DATA 未被协商，*vq_index* 被设置成虚拟队列索引。
+- 2. 当 VIRTIO_F_NOTIF_CONFIG_DATA 被协商过，*vq_notif_config_data* 被设置成 *queue_notif_config_data*。
+- 查阅『2.9 驱动通知』获取成员定义。
+- 查阅『4.1.4.4』了解如何计算『队列通知』地址。
+
+##### 4.1.5.2.1 驱动要求：可用缓冲区通知
+- 如果未协商 VIRTIO_F_NOTIFICATION_DATA，驱动通知**必须**是 16 位的通知。
+- 如果协商过 VIRTIO_F_NOTIFICATION_DATA，驱动通知**必须**是 32 位的通知。
+- 如果未协商 VIRTIO_F_NOTIF_CONFIG_DATA：
+- 1. 如果未协商 VIRTIO_F_NOTIFICATION_DATA，驱动**必须**将通知值写到虚拟队列索引。
+- 2. 如果协商过 VIRTIO_F_NOTIFICATION_DATA，驱动**必须**将 *vq_index* 写到虚拟队列索引。
+- 如果协商过 VIRTIO_F_NOTIF_CONFIG_DATA ：
+- 1. 如果未协商 VIRTIO_F_NOTIFICATION_DATA，驱动**必须**将通知值写到 *queue_notif_config_data*。
+- 2. 如果协商过 VIRTIO_F_NOTIFICATION_DATA，驱动**必须**将 *vq_notify_config_data* 写到 *queue_notif_config_data*。
+
+#### 4.1.5.3 已使用缓冲区通知
+- 如果虚拟队列需要使用，已使用缓冲区通知，则设备通常会按照以下方式进行操作：
+- 如果未启用 MSI-X 功能：
+- 1. 为该设备设置 ISR 状态字段的最低位。
+- 2. 为该设备发送相应的 PCI 中断信号。
+- 如果启用了 MSI-X 功能：
+- 1. 如果 *queue_msix_vector* 不等于 NO_VECTOR，则为该设备请求相应的 MSI-X 中断消息，此时 *queue_msix_vector* 会设置 MSI-X 表的条目编号。
+
+##### 4.1.5.3.1 设备要求：已使用缓冲区通知
+- 如果 MSI-X 功能被使能，并且 *queue_msix_vector* 不是虚拟队列的 NO_VECTOR，设备**禁止**传递该虚拟队列的中断。
+
+#### 4.1.5.4 设备配置更改通知
+- 某些虚拟 I/O PCI 设备可以更改设备配置状态，作为设备它特定配置区域[变更]的反馈。这种情况下：
+- 如果 MSI-X 功能未开启：
+- 1. 设置设备的 ISR 状态字段的第 2 低的比特位。
+- 2. 发送对应的 PCI 中断。
+- 如果 MSI-X 功能开启：
+- 1. 如果 *config_msix_vector* 不等于 NO_VECTOR，为设备请求对应的 MSI-X *中断信息，config_msix_vector* 设置成 MSI-X 表条目编号。
+- 一个单一的中断**可以**指示一个或者多个虚拟队列已经被使用，并且配置空间已经被修改。
+
+##### 4.1.5.4.1 设备要求：设备配置更改通知
+- 如果 MSI-X 功能开启，并且 *config_msix_vector* 不等于 NO_VECTOR，设备**禁止**传递设备配置空间更改相关的中断。
+
+##### 4.1.5.4.2 驱动要求：设备配置更改通知
+- 驱动必须处理以下情况：同一个中断被用来指示设备配置空间变更，和一个或者多个虚拟队列被使用。
+
+#### 4.1.5.5 驱动如何处理中断
+- 驱动中断处理程序通常会：
+- 如果 MSI-X 功能被禁用：
+– 1. 读取 ISR 状态字段，该字段会将其重置为零。
+– 2. 如果最低位被设置：遍历所有虚拟队列以查找该设备，以查看该设备是否已完成任何需要处理的操作。
+– 3. 如果第 2 个最低位被设置：重新检查配置空间以查看有何变化。
+- 如果 MSI-X 功能启用：
+– 1. 遍历与该 MSI-X 向量映射到的虚拟队列对应的设备，以查看该设备是否已完成任何需要处理的操作。
+– 2. 如果 MSI-X 向量等于 *config_msix_vector*，则重新检查配置空间以查看有何变化。
