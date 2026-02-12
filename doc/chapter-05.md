@@ -1,23 +1,73 @@
 # 5 设备类型
+- 除了队列、配置空间和内置在 virtio 中的特性协商功能之外，[本协议]还定义了若干设备。
+- 以下设备标识符用于识别不同类型的 virtio 设备。某些设备标识符是为那些尚未在本标准中定义的设备保留的。
+- 确定哪些设备可用及其类型是与总线相关的。
+
+| 设备 ID | Virtio 设备 |
+| ---- | ---- |
+| 0 | 保留（无效） |
+| 1 | 网络设备 |
+| 2 | 块设备 |
+| 3 | 控制台 |
+| 4 | 熵源 |
+| 5 | 内存 ballooning（传统） |
+| 6 | I/O 内存 |
+| 7 | rpmsg |
+| 8 | SCSI 主机 |
+| 9 | 9P 传输 |
+| 10 | mac80211 wlan |
+| 11 | rproc 串口 |
+| 12 | virtio CAIF |
+| 13 | 内存 ballon |
+| 16 | GPU 设备 |
+| 17 | 定时器/时钟设备 |
+| 18 | 输入设备 |
+| 19 | Socket 设备 |
+| 20 | 加密设备 |
+| 21 | 信号分配模块 |
+| 22 | pstore 设备 |
+| 23 | IOMMU 设备 |
+| 24 | 内存设备 |
+| 25 | 声卡设备 |
+| 26 | 文件系统设备 |
+| 27 | PMEM 设备 |
+| 28 | RPMB 设备 |
+| 29 | mac80211 hwsim 无线仿真设备 |
+| 30 | 视频编码设备 |
+| 31 | 视频解码设备 |
+| 32 | SCMI 设备 |
+| 33 | NitroSecureModule |
+| 34 | I2C 适配器 |
+| 35 | 看门狗 |
+| 36 | CAN 设备 |
+| 38 | 参数服务器 |
+| 39 | 音频控制设备 |
+| 40 | 蓝牙设备 |
+| 41 | GPIO 设备 |
+| 42 | RDMA 设备 |
+| 43 | 摄像头设备 |
+| 44 | ISM 设备 |
+| 45 | SPI 主机 |
+- 上述某些设备在本文件中未作具体说明，因为它们被认为尚不成熟或属于特定领域范畴。请注意，其中一些仅由现有的唯一实现方式所规定；它们可能会成为未来规范的一部分，也可能完全被摒弃，或者在本规范之外继续存在。我们不再对此做进一步阐述。
 
 ## 5.7 GPU 设备
-- virtio-gpu 是一种基于 virtio 的图形适配器。它可以在 2D 模式和 3D 模式下运行。在 3D 模式下，它会将渲染操作转交给主机 GPU 来处理，因此需要主机配备支持 3D 的 GPU。
+- virtio-gpu 是一种基于 virtio 的图形适配器。它可以在 2D 和 3D 模式下运行。在 3D 模式下，它会将渲染操作转交给主机 GPU 来处理，因此需要主机配备支持 3D 的 GPU。
 - 在 2D 模式下，virtio-gpu 设备支持 ARGB 硬件光标和多扫描输出（也称为头部）。
 
 ### 5.7.1 设备 ID
 - 16
 
 ### 5.7.2 虚拟队列
-- 0 controlq - 发送控制指令的队列
-- 1 cursorq - 发送光标更新信息的队列
-- 这 2 个队列有相同的格式。每个请求和响应都有一个固定格式的头部，紧跟着一些指令相关的数据字段。单独的光标队列是用于光标命令（VIRTIO_GPU_CMD_UPDATE_CURSOR 和 VIRTIO_GPU_CMD_MOVE_CURSOR）的“快速通道”，因此它们不会被控制队列中的耗时命令影响。
+- **0** controlq - 发送控制指令的队列
+- **1** cursorq - 发送光标更新信息的队列
+- 这 2 个队列有相同的格式。每个请求和响应，都有一个固定格式的头部，紧跟着一些指令相关的数据字段。单独的光标队列，是用于光标命令（VIRTIO_GPU_CMD_UPDATE_CURSOR 和 VIRTIO_GPU_CMD_MOVE_CURSOR）的“快速通道”，因此，它们不会被控制队列中的耗时命令影响[光标队列和控制队列互不影响，且控制队列由于具备各种渲染和资源指令，比较耗时]。
 
 ### 特性位
-- VIRTIO_GPU_F_VIRGL (0) 支持 virgl 3D 模式
-- VIRTIO_GPU_F_EDID (1) 支持 EDID
-- VIRTIO_GPU_F_RESOURCE_UUID (2) 支持向其他 virtio 设备传输 resource 时，指定 resource UUID
-- VIRTIO_GPU_F_RESOURCE_BLOB (3) 支持创建和使用 blob resource
-- VIRTIO_GPU_F_CONTEXT_INIT (4) 支持多上下文类型和同步时间线。需要先支持 VIRTIO_GPU_F_VIRGL。
+- VIRTIO_GPU_F_VIRGL (0) - 支持 virgl 3D 模式。
+- VIRTIO_GPU_F_EDID (1) - 支持 EDID。
+- VIRTIO_GPU_F_RESOURCE_UUID (2) - 支持向其他 virtio 设备传输资源时，指定资源UUID。
+- VIRTIO_GPU_F_RESOURCE_BLOB (3) - 支持创建和使用 blob 资源。
+- VIRTIO_GPU_F_CONTEXT_INIT (4) - 支持多上下文类型和同步时间线。需要先支持 VIRTIO_GPU_F_VIRGL。
 
 ### 5.7.4 设备配置布局
 - GPU 设备配置过程中，使用以下结构体和定义：
@@ -33,16 +83,16 @@ struct virtio_gpu_config {
 ```
 
 #### 5.7.4.1 设备配置字段
-- events_read 向驱动发送阻塞事件的信号。驱动***不能***写该字段。
-- events_clear 清除设备的阻塞事件。将 '1' 写入一个位中，将会清除 events_read 中对应的那个位，这类似于写清除的操作方式。
-- num_scanouts 指定了该设备所能支持的最大扫描次数。最小值为 1，最大值为 16。
-- num_capsets 指定了该设备所能支持的最大能力集合数量。最小值为 0。
+- ***events_read*** - 向驱动发送阻塞事件的信号。驱动***禁止***写该字段。
+- ***events_clear*** - 清除设备的阻塞事件。将 '1' 写入一个位中，将会清除 *events_read* 中对应的那个位，这类似于写清除的操作方式。
+- ***num_scanouts*** - 指定了该设备所能支持的最大扫描次数。最小值为 1，最大值为 16。
+- ***num_capsets*** - 指定了该设备所能支持的最大能力集合数量。最小值为 0。
 
 #### 5.7.4.2 事件
-- VIRTIO_GPU_EVENT_DISPLAY 显示配置已发生更改。驱动***应当***使用 VIRTIO_GPU_CMD_GET_DISPLAY_INFO 命令从设备中获取相关信息。如果 EDID 支持已经协商过（通过 VIRTIO_GPU_F_EDID 特性标志），设备还***应该***使用 VIRTIO_GPU_CMD_GET_EDID 命令来获取更新后的 EDID 数据块。
+- **VIRTIO_GPU_EVENT_DISPLAY** 显示配置已发生更改。驱动***应当***使用 VIRTIO_GPU_CMD_GET_DISPLAY_INFO 命令从设备中获取相关信息。如果 EDID 支持已经协商过（通过 VIRTIO_GPU_F_EDID 特性标志），设备还***应该***使用 VIRTIO_GPU_CMD_GET_EDID 命令来获取更新后的 EDID 数据块。
 
 ### 5.7.5 设备要求：设备初始化
-- 驱动***应该***使用 VIRTIO_GPU_CMD_GET_DISPLAY_INFO 命令从设备获取显示信息，并利用这些信息进行初始的扫描输出设置。如果已协商支持 EDID（VIRTIO_GPU_F_EDID 特性标志），则设备还***应该***使用 VIRTIO_GPU_CMD_GET_EDID 命令获取 EDID 信息。如果没有可用信息，或者所有显示器均处于禁用状态，驱动***可以***选择使用备用方案，例如，在显示器 0 上使用 1024x768 的分辨率。
+- 驱动***应该***使用 VIRTIO_GPU_CMD_GET_DISPLAY_INFO 命令从设备获取显示信息，并且利用这些信息进行初始的扫描输出设置。如果已协商支持 EDID（VIRTIO_GPU_F_EDID 特性标志），则设备还***应该***使用 VIRTIO_GPU_CMD_GET_EDID 命令获取 EDID 信息。如果没有可用信息，或者所有显示器均处于禁用状态，驱动***可以***选择使用备用方案，例如，在显示器 0 上使用 1024x768 的分辨率。
 - 驱动***应该***查询所有设备支持的共享内存区域。如果设备支持共享内存，该共享内存区域的 shmid ***必须***是以下类型中的一种：
 ```c
 enum virtio_gpu_shm_id {
