@@ -204,13 +204,107 @@ struct virtio_gpu_ctrl_hdr {
 - 1. ***types*** - 定义驱动请求（VIRTIO_GPU_CMD_*）的类型，或者设备响应的类型（VIRTIO_GPU_RESP_*）。
 - 2. ***flags*** - 请求/响应标志。
 - 3. ***fence_id*** - 如果驱动在请求 *flags* 字段中设置了 VIRTIO_GPU_FLAG_FENCE 位，设备**必须**：1. 在响应中设置 VIRTIO_GPU_FLAG_FENCE 位；2. 将请求中的 *fence_id* 字段，拷贝到响应中，并且；3. 只能在指令处理完成后，发送响应。
-- 4. ***ctx_id*** 渲染上下文（只在 3D 模式使用）。
-- 5. ***ring_idx*** 如果支持 VIRTIO_GPU_F_CONTEXT_INIT 特性，那么驱动**可以**在请求 *flags* 中设置 VIRTIO_GPU_FLAG_INFO_RING_IDX 位。这种情况下：
--     5.1 ring_idx 表示上下文特定的环形缓冲区索引值。其最小值为 0，最大值为 63。
--     5.2 如果设置了 VIRTIO_GPU_FLAG_FENCE 标志，那么 fence_id 在由 ctx_idx 和 ring_idx 定义的同步时间线上充当序列号的作用。
--     5.3 如果设置了 VIRTIO_GPU_FLAG_FENCE 标志，并且与 fence_id 关联的命令完成时，设备***必须***在相同的同步时间线上，针对序号小于等于 fence_id 的所有未完成命令发送响应。
-- 如果没有负载情况下，[指令处理]成功时，设备会返回 VIRTIO_GPU_RESP_OK_NODATA。否则 type 字段会指示负载的类型。
+- 4. ***ctx_id*** - 渲染上下文（只在 3D 模式使用）。
+- 5. ***ring_idx*** 如果支持 VIRTIO_GPU_F_CONTEXT_INIT 特性，那么驱动**可以**在请求 *flags* 中设置 VIRTIO_GPU_FLAG_INFO_RING_IDX 位。这种情况下：1. *ring_idx* 表示上下文特定的环形缓冲区索引值。其最小值为 0，最大值为 63（包含）。2. 如果设置了 VIRTIO_GPU_FLAG_FENCE 标志，那么 *fence_id* 在由 *ctx_idx* 和环形缓冲区索引所定义的同步时间线上，充当序列号的作用。3. 如果设置了 VIRTIO_GPU_FLAG_FENCE 标志，并且与 *fence_id* 关联的命令完成时，设备**必须**在相同的同步时间线上，针对序号小于等于 *fence_id* 的所有未完成命令发送响应。
+- 如果没有负载情况下，[指令处理]成功时，设备会返回 VIRTIO_GPU_RESP_OK_NODATA。否则 *type* 字段会指示负载的类型。
 - [指令处理]失败时，设备会返回错误码 VIRTIO_GPU_RESP_ERR_* 中的某 1 个。
 
 #### 5.7.6.8 设备操作：controlq
 - 对于任一坐标，规定 (0,0) 位于左上，x 坐标向右增长，y 坐标向下增长。
+- **VIRTIO_GPU_CMD_GET_DISPLAY_INFO** [该指令]获取当前的输出配置。没有请求数据（只是简单的结构体 *virtio_gpu_ctrl_hdr*）。响应类型是 VIRTIO_GPU_RESP_OK_DISPLAY_INFO，响应数据是结构体 *virtio_gpu_resp_display_info*。
+```c
+#define VIRTIO_GPU_MAX_SCANOUTS 16
+struct virtio_gpu_rect {
+    le32 x;
+    le32 y;
+    le32 width;
+    le32 height;
+};
+
+struct virtio_gpu_resp_display_info {
+    struct virtio_gpu_ctrl_hdr hdr;
+    struct virtio_gpu_display_one {
+    struct virtio_gpu_rect r;
+        le32 enabled;
+        le32 flags;
+    } pmodes[VIRTIO_GPU_MAX_SCANOUTS];
+};
+```
+- 该响应包含一个列表，该列表包含每个扫描输出信息。该信息中包含扫描输出是否使能，和倾向的位置和尺寸是多少。
+- 该尺寸（字段 *width* 和 *height*）与 EDID 显示信息中的原生面板分辨率相似，但虚拟机的情况有所不同，即当代表虚拟机内显示的主机窗口被调整大小时，尺寸可能会发生变化。
+- 该位置（字段 *x* 和 *y*）描述了显示是如何被组织的。
+- 当用户使能过显示器时，*enabled* 字段就被置上。就和物理显示连接器的联通状态一个道理。
+
+- **VIRTIO_GPU_CMD_GET_EDID** [该指令]获取给定的扫描输出的 EDID 数据。请求数据是结构体 virtio_gpu_get_edid。响应类型是 VIRTIO_GPU_RESP_OK_EDID，响应数据是结构体 virtio_gpu_resp_edid。该[特性的]支持是可选的，并且通过使用 VIRTIO_GPU_F_EDID 特性标志来协商。
+```c
+struct virtio_gpu_get_edid {
+    struct virtio_gpu_ctrl_hdr hdr;
+    le32 scanout;
+    le32 padding;
+};
+
+struct virtio_gpu_resp_edid {
+    struct virtio_gpu_ctrl_hdr hdr;
+    le32 size;
+    le32 padding;
+    u8 edid[1024];
+};
+```
+- 该响应包含扫描输出的 EDID 显示数据 blob（如 VESA 所描述）。
+
+- **VIRTIO_GPU_CMD_RESOURCE_CREATE_2D** [该指令]创建一个主机上的 2D 资源。请求数据是结构体 *virtio_gpu_resource_create_2d*。响应类型是 VIRTIO_GPU_RESP_OK_NODATA。
+```c
+enum virtio_gpu_formats {
+    VIRTIO_GPU_FORMAT_B8G8R8A8_UNORM = 1,
+    VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM = 2,
+    VIRTIO_GPU_FORMAT_A8R8G8B8_UNORM = 3,
+    VIRTIO_GPU_FORMAT_X8R8G8B8_UNORM = 4,
+    VIRTIO_GPU_FORMAT_R8G8B8A8_UNORM = 67,
+    VIRTIO_GPU_FORMAT_X8B8G8R8_UNORM = 68,
+    VIRTIO_GPU_FORMAT_A8B8G8R8_UNORM = 121,
+    VIRTIO_GPU_FORMAT_R8G8B8X8_UNORM = 134,
+};
+
+struct virtio_gpu_resource_create_2d {
+    struct virtio_gpu_ctrl_hdr hdr;
+    le32 resource_id;
+    le32 format;
+    le32 width;
+    le32 height;
+};
+```
+- 该指令在主机上创建一个 2D 资源，指定了宽度，高度和格式。该资源 id 由客户机生成。
+
+- **VIRTIO_GPU_CMD_RESOURCE_UNREF** 销毁一个资源。请求数据是结构体 *virtio_gpu_resource_unref*。响应类型是 VIRTIO_GPU_RESP_OK_NODATA。
+```c
+struct virtio_gpu_resource_unref {
+    struct virtio_gpu_ctrl_hdr hdr;
+    le32 resource_id;
+    le32 padding;
+};
+```
+- 该指令通知主机：客户机不再需要该资源。
+
+- **VIRTIO_GPU_CMD_SET_SCANOUT** [该指令]为某个[显示]输出设置扫描输出参数。请求数据是结构体 *virtio_gpu_set_scanout*。响应类型是 VIRTIO_GPU_RESP_OK_NODATA。
+```c
+struct virtio_gpu_set_scanout {
+    struct virtio_gpu_ctrl_hdr hdr;
+    struct virtio_gpu_rect r;
+    le32 scanout_id;
+    le32 resource_id;
+};
+```
+- 该指令为某个扫描输出设置扫描输出参数。其中的 *resource_id* 是扫描输出所取资源[的 ID]，伴随着一个矩阵。
+- 扫描矩阵必须完全被底层资源所覆盖[矩阵范围不能超过资源尺寸]。允许存在重叠（或完全相同的）扫描区域，典型的应用场景是屏幕镜像。
+- 驱动可以使用 resource_id = 0 [这种赋值方式]，去取消一个扫描输出。
+
+- **VIRTIO_GPU_CMD_RESOURCE_FLUSH** [该指令]刷新一个扫描输出资源。请求数据是结构体 *virtio_gpu_resource_flush*。响应类型是 VIRTIO_GPU_RESP_OK_NODATA。
+```c
+struct virtio_gpu_resource_flush {
+    struct virtio_gpu_ctrl_hdr hdr;
+    struct virtio_gpu_rect r;
+    le32 resource_id;
+    le32 padding;
+};
+```
+- 该指令将资源刷新到屏幕。它包含一个矩形区域和一个资源 ID，并清除该资源正在使用的任何扫描输出内容。
