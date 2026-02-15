@@ -308,3 +308,128 @@ struct virtio_gpu_resource_flush {
 };
 ```
 - 该指令将资源刷新到屏幕。它包含一个矩形区域和一个资源 ID，并清除该资源正在使用的任何扫描输出内容。
+
+- **VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D** [该指令]将客户机内存转换成主机资源。请求数据是结构体 *virtio_gpu_transfer_to_host_2d*。响应类型是 VIRTIO_GPU_RESP_OK_NODATA。
+```c
+struct virtio_gpu_transfer_to_host_2d {
+    struct virtio_gpu_ctrl_hdr hdr;
+    struct virtio_gpu_rect r;
+    le64 offset;
+    le32 resource_id;
+    le32 padding;
+};
+```
+- 该指令接收一个资源 ID、一个指向该资源内部目标位置的偏移量，以及一个用于将数据传输至该资源的主机存储区域的矩阵。
+
+- **VIRTIO_GPU_CMD_RESOURCE_ATTACH_BACKING** 给一个资源指定后端[内存]页。请求数据是结构体 *virtio_gpu_resource_attach_backing*，紧跟着结构体 *virtio_gpu_mem_entry* 条目。响应类型是 VIRTIO_GPU_RESP_OK_NODATA。
+```c
+struct virtio_gpu_resource_attach_backing {
+    struct virtio_gpu_ctrl_hdr hdr;
+    le32 resource_id;
+    le32 nr_entries;
+};
+
+struct virtio_gpu_mem_entry {
+    le64 addr;
+    le32 length;
+    le32 padding;
+};
+```
+- 该指令指定一系列客户机[内存]页，作为资源的后端存储。从该时刻起，这些页被用于该资源的传输操作。
+
+- **VIRTIO_GPU_CMD_RESOURCE_DETACH_BACKING** 从资源中分离出后端页。请求数据为结构体 *virtio_gpu_resource_detach_backing*。响应类型为 VIRTIO_GPU_RESP_OK_NODATA。
+```c
+struct virtio_gpu_resource_detach_backing {
+    struct virtio_gpu_ctrl_hdr hdr;
+    le32 resource_id;
+    le32 padding;
+};
+```
+- 该指令从资源中分离出后端页，以便在进行用户切换或对象销毁时使用。
+
+- **VIRTIO_GPU_CMD_GET_CAPSET_INFO** 获取和一个特定 *capset_index* 关联的相关信息（该索引 **必须** 小于设备配置中定义的 *num_capsets*）。请求数据是结构体 *virtio_gpu_get_capset_info*。响应类型是 VIRTIO_GPU_RESP_OK_CAPSET_INFO。
+- 如果成功，结构体 *virtio_gpu_resp_capset_info* 将会包含和特定 capset_index 关联的 *capset_id*，*capset_max_version*，*capset_max_size*。字段 capset_id **必须** 是以下数值中的一种（详见以下值列表）：
+- 1. VIRTIO_GPU_CAPSET_VIRGL – Virgl（Gallium OpenGL） 协议的第一个版本。
+- 2. VIRTIO_GPU_CAPSET_VIRGL2 - capset 修复后，Virgl（Gallium OpenGL）协议的第二个版本。
+- 3. VIRTIO_GPU_CAPSET_GFXSTREAM - （通常是）gfxsteam 的自动生成的 GLES 和 Vulkan 流协议。
+- 4. VIRTIO_GPU_CAPSET_VENUS - （通常是）Mesa 的自动生成的 Vulkan 协议。
+- 5. VIRTIO_GPU_CAPSET_CROSS_DOMAIN – 为通过 Wayland 代理的显示虚拟化所定的协议。
+```c
+struct virtio_gpu_get_capset_info {
+    struct virtio_gpu_ctrl_hdr hdr;
+    le32 capset_index;
+    le32 padding;
+};
+
+#define VIRTIO_GPU_CAPSET_VIRGL 1
+#define VIRTIO_GPU_CAPSET_VIRGL2 2
+#define VIRTIO_GPU_CAPSET_GFXSTREAM 3
+#define VIRTIO_GPU_CAPSET_VENUS 4
+#define VIRTIO_GPU_CAPSET_CROSS_DOMAIN 5
+struct virtio_gpu_resp_capset_info {
+    struct virtio_gpu_ctrl_hdr hdr;
+    le32 capset_id;
+    le32 capset_max_version;
+    le32 capset_max_size;
+    le32 padding;
+};
+```
+
+- **VIRTIO_GPU_CMD_GET_CAPSET** 获取和一个特定 *capset_id* 和 *capset_version* 相关的 capset。请求数据是结构体 *virtio_gpu_get_capset*。响应类型是 VIRTIO_GPU_RESP_OK_CAPSET。
+```c
+struct virtio_gpu_get_capset {
+    struct virtio_gpu_ctrl_hdr hdr;
+    le32 capset_id;
+    le32 capset_version;
+};
+
+struct virtio_gpu_resp_capset {
+    struct virtio_gpu_ctrl_hdr hdr;
+    u8 capset_data[];
+};
+```
+
+- **VIRTIO_GPU_CMD_RESOURCE_ASSIGN_UUID** 从一个资源创建一个导出对象。请求数据是结构体 *virtio_gpu_resource_assign_uuid*。响应类型是 VIRTIO_GPU_RESP_OK_RESOURCE_UUID，响应数据是结构体 *virtio_gpu_resp_resource_uuid*。该[功能的]支持是可选的，并且使用 VIRTIO_GPU_F_RESOURCE_UUID 特性标志位来协商。
+```c
+struct virtio_gpu_resource_assign_uuid {
+    struct virtio_gpu_ctrl_hdr hdr;
+    le32 resource_id;
+    le32 padding;
+};
+struct virtio_gpu_resp_resource_uuid {
+    struct virtio_gpu_ctrl_hdr hdr;
+    u8 uuid[16];
+};
+```
+- 该响应中包含一个 UUID，用于标识从主机私有资源导出的对象。请注意，如果该资源具有附加的后端，则通过导出对象由其他设备对主机私有资源所做的修改，在将其传输到后端之前，不会在附加的后端中显示出来。
+
+- **VIRTIO_GPU_CMD_RESOURCE_CREATE_BLOB** 创建一个 virtio-gpu blob 资源。请求数据是结构体 *virtio_gpu_resource_create_blob*，后面跟着结构体 virtio_gpu_mem_entry 条目。响应类型是 VIRTIO_GPU_RESP_OK_NODATA。该[功能的]支持是可选的，并且使用 VIRTIO_GPU_F_RESOURCE_BLOB 特性标志位来协商。
+```c
+#define VIRTIO_GPU_BLOB_MEM_GUEST 0x0001
+#define VIRTIO_GPU_BLOB_MEM_HOST3D 0x0002
+#define VIRTIO_GPU_BLOB_MEM_HOST3D_GUEST 0x0003
+
+#define VIRTIO_GPU_BLOB_FLAG_USE_MAPPABLE 0x0001
+#define VIRTIO_GPU_BLOB_FLAG_USE_SHAREABLE 0x0002
+#define VIRTIO_GPU_BLOB_FLAG_USE_CROSS_DEVICE 0x0004
+
+struct virtio_gpu_resource_create_blob {
+    struct virtio_gpu_ctrl_hdr hdr;
+    le32 resource_id;
+    le32 blob_mem;
+    le32 blob_flags;
+    le32 nr_entries;
+    le64 blob_id;
+    le64 size;
+};
+```
+- 一个二进制数据块资源就是一个容器，包含：
+- 1. 客户机内存（称为 “仅客户端二进制数据块资源”）
+- 2. 主机内存（称为 “仅主机二进制数据块资源”）
+- 3. 客户机内存和主机[联合]内存（称为 “默认二进制数据块资源”）
+- 二进制数据块资源的内存属性，**必须**通过 *blob_mem* 来描述，其必须是非零的。
+- 对于默认及仅客户端二进制数据块资源，可为该资源分配 *nr_entries* 个访客内存条目。对于默认二进制数据块资源（即当 *blob_mem* 为 VIRTIO_GPU_BLOB_MEM_HOST3D_GUEST 时），这些内存条目将用作主机内存的影子缓冲区。为了方便支持交换入和交换出的驱动，*nr_entries* 可以为零，并随后可以使用 VIRTIO_GPU_CMD_RESOURCE_ATTACH_BACKING。使用 VIRTIO_GPU_CMD_RESOURCE_DETACH_BACKING 可以取消分配内存条目。
+- *blob_mem* 只能是 VIRTIO_GPU_BLOB_MEM_HOST3D 和 VIRTIO_GPU_BLOB_MEM_HOST3D_GUEST，如果支持 VIRTIO_GPU_F_VIRGL 则可以是这些值。无论是否支持 VIRTIO_GPU_F_VIRGL，VIRTIO_GPU_BLOB_MEM_GUEST 都是有效的。
+- 对于 VIRTIO_GPU_BLOB_MEM_HOST3D 和 VIRTIO_GPU_BLOB_MEM_HOST3D_GUEST，virtio-gpu 资源**必须**从由 *blob_id* 标识的渲染上下文本地对象创建。实际的分配是通过 VIRTIO_GPU_CMD_SUBMIT_3D 完成的。
+- 驱动**必须**告知设备该二进制数据块资源是否用于内存访问、驱动实例之间的共享以及/或与其他设备的共享。这是通过 *blob_flags* 字段完成的。
+- 如果设置了 VIRTIO_GPU_F_VIRGL，那么 VIRTIO_GPU_CMD_TRANSFER_TO_HOST_3D 和 VIRTIO_GPU_CMD_TRANSFER_FROM_HOST_3D 这两个命令均可用于更新资源。驱动对二进制数据块资源的图像/缓冲区视图没有限制。

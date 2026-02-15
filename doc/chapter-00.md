@@ -8,6 +8,7 @@
 - notification - 通知
 - field - 字段
 - ring - 环形缓冲区
+- blob resource - 二进制数据块资源
 
 ## 2 术语翻译
 - MUST - 必须
