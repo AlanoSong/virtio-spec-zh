@@ -157,3 +157,6 @@
       - [5.7.6.6 设备操作：配置鼠标光标](./doc/chapter-05.md#5766-设备操作配置鼠标光标)
       - [5.7.6.7 设备操作：请求头部](./doc/chapter-05.md#5767-设备操作请求头部)
       - [5.7.6.8 设备操作：controlq](./doc/chapter-05.md#5768-设备操作controlq)
+      - [5.7.6.9 设备操作：controlq (3d)](./doc/chapter-05.md#5769-设备操作controlq-3d)
+      - [5.7.6.10 设备操作：cursorq](./doc/chapter-05.md#57610-设备操作cursorq)
+    - [5.7.7 VGA 兼容性](./doc/chapter-05.md#577-vga-兼容性)

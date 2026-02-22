@@ -433,3 +433,99 @@ struct virtio_gpu_resource_create_blob {
 - 对于 VIRTIO_GPU_BLOB_MEM_HOST3D 和 VIRTIO_GPU_BLOB_MEM_HOST3D_GUEST，virtio-gpu 资源**必须**从由 *blob_id* 标识的渲染上下文本地对象创建。实际的分配是通过 VIRTIO_GPU_CMD_SUBMIT_3D 完成的。
 - 驱动**必须**告知设备该二进制数据块资源是否用于内存访问、驱动实例之间的共享以及/或与其他设备的共享。这是通过 *blob_flags* 字段完成的。
 - 如果设置了 VIRTIO_GPU_F_VIRGL，那么 VIRTIO_GPU_CMD_TRANSFER_TO_HOST_3D 和 VIRTIO_GPU_CMD_TRANSFER_FROM_HOST_3D 这两个命令均可用于更新资源。驱动对二进制数据块资源的图像/缓冲区视图没有限制。
+
+- **VIRTIO_GPU_CMD_SET_SCANOUT_BLOB** 为二进制数据块资源设置扫描输出参数。请求数据是结构体 *virtio_gpu_set_scanout_blob*。响应类型是 VIRTIO_GPU_RESP_OK_NODATA。该支持是可选的，并且使用 VIRTIO_GPU_F_RESOURCE_BLOB 特性位协商。
+```c
+struct virtio_gpu_set_scanout_blob {
+    struct virtio_gpu_ctrl_hdr hdr;
+    struct virtio_gpu_rect r;
+    le32 scanout_id;
+    le32 resource_id;
+    le32 width;
+    le32 height;
+    le32 format;
+    le32 padding;
+    le32 strides[4];
+    le32 offsets[4];
+};
+```
+- 矩形 *r* 表示要显示二进制数据块资源的哪一块。其余数据成员，是和二进制数据块资源关联的数据。成员中的 format **必须**是枚举量 *virtio_gpu_formats* 中的一个。format **可以**是压缩类型。
+
+#### 5.7.6.9 设备操作：controlq (3d)
+- 如果 VIRTIO_GPU_F_VIRGL 特性位置上，则设备支持以下指令。
+- **VIRTIO_GPU_CMD_CTX_CREATE** 为提交一个非透明的指令流，创建上下文。请求数据是结构体 virtio_gpu_ctx_create。响应类型是 VIRTIO_GPU_RESP_OK_NODATA。
+```c
+#define VIRTIO_GPU_CONTEXT_INIT_CAPSET_ID_MASK 0x000000ff;
+struct virtio_gpu_ctx_create {
+    struct virtio_gpu_ctrl_hdr hdr;
+    le32 nlen;
+    le32 context_init;
+    char debug_name[64];
+};
+```
+- 该实现**必须**为给定的 *ctx_id* 中的 *hdr* 创建一个上下文。为了调试目的，驱动提供了 *debug_name* 和它的长度 *nlen*。如果支持 VIRTIO_GPU_F_CONTEXT_INIT，那么 context_init 的低 8 比特**可能**包含和上下文关联的 *capset_id*。这种情况下，设备**必须**创建一个可以处理特定指令流的上下文。
+- 如果 *context_init* 的低 8 比特是 0，则上下文的类型由设备决定。
+- **VIRTIO_GPU_CMD_CTX_DESTROY**
+- **VIRTIO_GPU_CMD_CTX_ATTACH_RESOURCE**
+- **VIRTIO_GPU_CMD_CTX_DETACH_RESOURCE** 管理 virtio-gpu 3d 上下文。
+- **VIRTIO_GPU_CMD_RESOURCE_CREATE_3D** 创建 virtio-gpu 3d 资源。
+- **VIRTIO_GPU_CMD_TRANSFER_TO_HOST_3D**
+- **VIRTIO_GPU_CMD_TRANSFER_FROM_HOST_3D** 从或者向 virt-gpu 3d 资源转换数据。
+- **VIRTIO_GPU_CMD_SUBMIT_3D** 提交一个非透明的指令流。指令流的类型，是在创建上下文时指定的。
+- **VIRTIO_GPU_CMD_RESOURCE_MAP_BLOB** 将仅主机访问的二进制块资源，映射到主机可见内存区域的某个偏移位置。请求数据为结构体 virtio_gpu_resource_map_blob。驱动**禁止**映射已经映射过的二进制块资源。响应类型为 VIRTIO_GPU_RESP_OK_MAP_INFO。支持是可选的，并通过使用 VIRTIO_GPU_F_RESOURCE_BLOB 特性位，以及检查主机可见内存区域的存在来进行协商。
+```c
+struct virtio_gpu_resource_map_blob {
+    struct virtio_gpu_ctrl_hdr hdr;
+    le32 resource_id;
+    le32 padding;
+    le64 offset;
+};
+
+#define VIRTIO_GPU_MAP_CACHE_MASK       0x0f
+#define VIRTIO_GPU_MAP_CACHE_NONE       0x00
+#define VIRTIO_GPU_MAP_CACHE_CACHED     0x01
+#define VIRTIO_GPU_MAP_CACHE_UNCACHED   0x02
+#define VIRTIO_GPU_MAP_CACHE_WC         0x03
+struct virtio_gpu_resp_map_info {
+struct virtio_gpu_ctrl_hdr hdr;
+    u32 map_info;
+    u32 padding;
+};
+```
+- **VIRTIO_GPU_CMD_RESOURCE_UNMAP_BLOB** 从主机可见的内存区域中，解映射一个仅主机可用的二进制块资源。请求数据为结构体 virtio_gpu_resource_unmap_blob。响应类型为 VIRTIO_GPU_RESP_OK_NODATA。该功能是可选的，并通过使用 VIRTIO_GPU_F_RESOURCE_BLOB 特性标志，以及检查主机可见内存区域的存在来进行协商实现。
+```c
+struct virtio_gpu_resource_unmap_blob {
+    struct virtio_gpu_ctrl_hdr hdr;
+    le32 resource_id;
+    le32 padding;
+};
+```
+
+#### 5.7.6.10 设备操作：cursorq
+- 所有的 cursorq 指令使用相同的指令结构体。
+```c
+struct virtio_gpu_cursor_pos {
+    le32 scanout_id;
+    le32 x;
+    le32 y;
+    le32 padding;
+};
+
+struct virtio_gpu_update_cursor {
+    struct virtio_gpu_ctrl_hdr hdr;
+    struct virtio_gpu_cursor_pos pos;
+    le32 resource_id;
+    le32 hot_x;
+    le32 hot_y;
+    le32 padding;
+};
+```
+- **VIRTIO_GPU_CMD_UPDATE_CURSOR** 更新光标。请求数据是结构体 *virtio_gpu_update_cursor*。响应类型是 VIRTIO_GPU_RESP_OK_NODATA。
+- 完全的光标更新。光标会从指定的 *resource_id* 中更新，并且移动到 *pos*。驱动必须事先将光标转换至资源中（通过控制队列命令实现），并确保用于填充资源的命令能够得到实际处理（通过围栏机制实现）。
+- **VIRTIO_GPU_CMD_MOVE_CURSOR** 移动光标。请求数据是结构体 *structvirtio_gpu_update_cursor*。响应类型是 VIRTIO_GPU_RESP_OK_NODATA。
+- 移动光标到 *pos* 中指定的位置。其他的字段未使用，并且会被设备忽略。
+
+### 5.7.7 VGA 兼容性
+- 仅适用于通过 PCI 进行的 Virtio 连接。GPU 设备可以带有或不带有 VGA 兼容性。如果具备 VGA 兼容性，PCI 类型应为 DISPLAY_VGA，否则应为 DISPLAY_OTHER。
+- VGA 兼容性：PCI 区域 0 包含线性帧缓冲区，标准 VGA 寄存器存在。配置扫描输出（VIRTIO_GPU_CMD_SET_SCANOUT）会将设备从 VGA 兼容模式切换到原生 Virtio 模式。复位会将其切换回 VGA 兼容模式。
+- 注意：qemu 实现还提供了位于 PCI 区域 1 的 bochs 显示界面 I/O 端口和 mmio 带，因此与 qemu stdvga 完全兼容（请参阅 qemu 源码中的 docs/specs/standard-vga.txt）
