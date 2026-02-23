@@ -3,12 +3,15 @@
 ## 1 名词翻译
 - driver - 驱动
 - device - 设备
-- virtio - 虚拟 I/O
+- virtio - virtio [虚拟 I/O]
+- virtqueue - virtqueue [虚拟队列]
 - legacy - 旧版
 - notification - 通知
 - field - 字段
 - ring - 环形缓冲区
 - blob resource - 二进制数据块资源
+- used buffer - 已使用缓冲区
+- avaliable buffer - 可用缓冲区
 
 ## 2 术语翻译
 - MUST - 必须
