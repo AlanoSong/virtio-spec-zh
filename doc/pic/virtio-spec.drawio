@@ -1,6 +1,6 @@
 <mxfile host="Electron" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/29.5.2 Chrome/142.0.7444.265 Electron/39.6.1 Safari/537.36" version="29.5.2">
   <diagram name="第 1 页" id="b6FY2BoEzrRSIlWfr-FV">
-    <mxGraphModel dx="850" dy="514" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="595" dy="360" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -142,6 +142,51 @@
           <mxGeometry height="50" relative="1" width="50" as="geometry">
             <mxPoint x="870" y="270.24" as="sourcePoint" />
             <mxPoint x="780" y="270" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fS0s982iXiGUzeSRIdd2-1" edge="1" parent="1" style="endArrow=none;dashed=1;html=1;rounded=0;" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="910" y="650" as="sourcePoint" />
+            <mxPoint x="540" y="650" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fS0s982iXiGUzeSRIdd2-2" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="host device" vertex="1">
+          <mxGeometry height="30" width="60" x="530" y="660" as="geometry" />
+        </mxCell>
+        <mxCell id="fS0s982iXiGUzeSRIdd2-3" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="guest driver" vertex="1">
+          <mxGeometry height="30" width="60" x="530" y="610" as="geometry" />
+        </mxCell>
+        <mxCell id="fS0s982iXiGUzeSRIdd2-4" edge="1" parent="1" style="shape=flexArrow;endArrow=classic;html=1;rounded=0;fillColor=#dae8fc;width=70;endSize=8.126666666666667;strokeColor=#6c8ebf;" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="640" y="675" as="sourcePoint" />
+            <mxPoint x="640" y="610" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fS0s982iXiGUzeSRIdd2-5" connectable="0" parent="fS0s982iXiGUzeSRIdd2-4" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="configuration&lt;div&gt;change&lt;/div&gt;&lt;div&gt;notification&lt;/div&gt;" vertex="1">
+          <mxGeometry relative="1" x="-0.3098" as="geometry">
+            <mxPoint y="-1" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fS0s982iXiGUzeSRIdd2-7" edge="1" parent="1" style="shape=flexArrow;endArrow=classic;html=1;rounded=0;fillColor=#dae8fc;width=70;endSize=8.126666666666667;strokeColor=#6c8ebf;" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="740" y="675" as="sourcePoint" />
+            <mxPoint x="740" y="610" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fS0s982iXiGUzeSRIdd2-8" connectable="0" parent="fS0s982iXiGUzeSRIdd2-7" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="used&lt;div&gt;buffer&lt;/div&gt;&lt;div&gt;notification&lt;/div&gt;" vertex="1">
+          <mxGeometry relative="1" x="-0.3098" as="geometry">
+            <mxPoint y="-1" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fS0s982iXiGUzeSRIdd2-10" edge="1" parent="1" style="shape=flexArrow;endArrow=classic;html=1;rounded=0;fillColor=#e1d5e7;width=70;endSize=8.126666666666667;strokeColor=#9673a6;" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="840" y="610" as="sourcePoint" />
+            <mxPoint x="840" y="675" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="fS0s982iXiGUzeSRIdd2-11" connectable="0" parent="fS0s982iXiGUzeSRIdd2-10" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="available&lt;div&gt;buffer&lt;/div&gt;&lt;div&gt;notification&lt;/div&gt;" vertex="1">
+          <mxGeometry relative="1" x="-0.3098" as="geometry">
+            <mxPoint y="-1" as="offset" />
           </mxGeometry>
         </mxCell>
       </root>
