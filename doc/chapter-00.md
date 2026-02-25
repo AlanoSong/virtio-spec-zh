@@ -5,7 +5,7 @@
 - device - 设备
 - virtio - virtio [虚拟 I/O] (不翻译)
 - virtqueue - virtqueue [虚拟队列] (不翻译)
-- legacy - 旧版
+- legacy - 传统
 - notification - 通知
 - field - 字段
 - ring - 环形缓冲区
