@@ -12,6 +12,10 @@
 - blob resource - 二进制数据块资源
 - used buffer - 已使用缓冲区
 - available buffer - 可用缓冲区
+- OS - 操作系统
+- host - 主机
+- gutest - 客户机
+- entry - 条目
 
 ## 2 术语翻译
 - MUST - 必须
