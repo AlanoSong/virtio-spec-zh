@@ -309,16 +309,57 @@ struct virtq_avail {
 - 该值从 0 开始递增。
 - **注意**：传统协议[Virtio PCI Draft]将这个结构体称为 vring_avail，并且将这个常量[上文代码中的 VIRTQ_AVAIL_F_NO_INTERRUPT]称为 VRING_AVAIL_F_NO_INTERRUPT，但是结构体排布和取值都是一样的。
 
-#### 2.7.6.1 驱动要求：virtqueue的可用环形缓冲区
+#### 2.7.6.1 驱动要求：virtqueue 的可用环形缓冲区
 - 驱动**禁止**递减virtqueue上的可用 idx 值（就是说，暴露[给设备]的缓冲区无法撤回）。
 
-### 2.7.7 已使用缓冲区提示抑制
+### 2.7.7 已使用缓冲区通知抑制
+- 如果未协商 VIRTIO_F_EVENT_IDX 特性位，那么可用环形缓冲区中的 *flag* 字段就提供了一种简单的机制，让驱动能够告知设备在使用缓冲区时 [驱动] 不需要接收通知。否则，使用 *used_event* 则是一种更高效的替代方案，其中驱动会指定设备在需要接收通知之前能够推进多远。
+- 这两种通知抑制方法都不可靠，因为它们与设备之间没有同步机制，但它们起到了有用的优化作用。
 
-#### 驱动要求：已使用缓冲区提示抑制
+#### 2.7.7.1 驱动要求：已使用缓冲区通知抑制
+- 如果未协商 VIRTIO_F_EVENT_IDX 特性位：
+- 1. 驱动**必须**将 *flags* 设为 0 或 1。
+- 2. 驱动**可以**将 *flags* 设为 1 来告知设备：不需要通知。
+- 否则，如果协商过 VIRTIO_F_EVENT_IDX 特性位：
+- 1. 驱动**必须**将 *flags* 设为 0。
+- 2. 驱动**可以**使用 *used_event* 来告知设备，在设备将具有由 *used_event* 指定索引的条目写入已使用环形缓冲区之前（等同于在已使用环形缓冲区中的 *idx* 达到 *used_event* + 1 之前），不需要通知。
+- 驱动**必须**处理来自设备的虚假通知。
 
-#### 设备要求：已使用缓冲区提示抑制
+#### 2.7.7.2 设备要求：已使用缓冲区通知抑制
+- 如果未协商 VIRTIO_F_EVENT_IDX 特性位：
+- 1. 设备**必须**忽略 *used_event* 的值。
+- 2. 在设备将描述符索引写入已使用环形缓冲区之后：
+- 2.1 如果 *flags* 是 1，设备**不应该**发送通知。
+- 2.2 如果 *flags* 是 0,设备**必须**发送通知。
+- 否则，如果协商过 VIRTIO_F_EVENT_IDX 特性位：
+- 1. 设备**必须**忽略 *flags* 的低位。
+- 2. 在设备将描述符索引写入已使用环形缓冲区之后：
+- 2.1 如果已使用环形缓冲区中的 *idx* 字段等于 *used_event*，设备**必须**发送通知。
+- 2.2 否则，设备**不应该**发送通知。
+- **注意**：举例，如果 *used_event* 值是 0，那么在第一个缓冲区用完后，具备 VIRTIO_F_EVENT_IDX [特性] 的设备，将会发送一个已使用缓冲区通知给驱动（在使用完第 65536 个缓冲区之后，也是如此）。
 
-### 2.7.8 virtqueue已使用环形缓冲区
+### 2.7.8 virtqueue 已使用环形缓冲区
+- 已使用环形缓冲区，具有以下布局结构：
+```c
+struct virtq_used {
+#define VIRTQ_USED_F_NO_NOTIFY 1
+    le16 flags;
+    le16 idx;
+    struct virtq_used_elem ring[ /* Queue Size */];
+    le16 avail_event; /* Only if VIRTIO_F_EVENT_IDX */
+};
+
+/* le32 is used here for ids for padding reasons. */
+struct virtq_used_elem {
+    /* Index of start of used descriptor chain. */
+    le32 id;
+    /*
+     * The number of bytes written into the device writable portion of
+     * the buffer described by the descriptor chain.
+     */
+    le32 len;
+};
+```
 
 #### 2.7.8.1 传统接口：virtqueue已使用环形缓冲区
 
