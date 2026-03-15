@@ -499,26 +499,28 @@ for (;;) {
 
 ## 2.8 packed virtqueue
 
-- packed virtqueue 是一个可选的布局紧凑型 virtqueue，并且使用可读可写内存（即内存可以同时被 host 和 guest 读和写）。
-- 要想使用 packed virtqueue 功能，需要（Alano：driver 和 device）协商 VIRTIO_F_RING_PACKED 特性标志位。
-- 每个 packed virtqueue 支持高达 2^15 个 entires。
-- 根据当前（Alano：协议规定的）传输方式，virtqueue 被放置在 driver 分配的 guest memory 中。每个 packed virtqueue 包含 3 部分：
-- 1. descriptor ring - 位于 descriptor area 中
-- 2. driver event suppression - 位于 driver area 中
-- 3. device event suppression - 位于 device area 中
+- packed virtqueue 是一个可选的布局紧凑型 virtqueue，使用可读可写内存（即内存可以同时被主机和客户机读和写）。
+- 使用 packed virtqueue 功能，需要 [驱动和设备] 协商 VIRTIO_F_RING_PACKED 特性标志位。
+- packed virtqueue 支持多达 2^15 个条目。
+- 根据当前传输方式，virtqueue 被放置在驱动分配的客户机内存中。每个 packed virtqueue 包含 3 部分：
+- 1. Descriptor Ring - 位于 Descriptor Area
+- 2. Driver Event Suppression - 位于 Driver Area
+- 3. Device Event Suppression - 位于 Device Area
 
-- descriptor ring 包含多个描述符，并且每个描述符可能包含以下部分：
+- 描述符环形缓冲区包含多个描述符，并且每个描述符可能包含以下部分：
 - 1. Buffer ID
 - 2. Element Address
 - 3. Element Length
 - 4. Flags
 
-- 缓冲区包含 0 个或者更多的 device 可读的，物理连续（Alano：就是物理地址连续）的元素，并且这些元素后面紧跟着 0 个或者更多的物理连续的 device 可写的元素。（每个缓冲区至少包含一个元素）
-- 当 driver 想把这样一个缓冲区发送给 device 的时候，driver 会向 descriptor ring 中，写入至少 1 个 available descriptor，这个 descriptor 会填写该缓冲区的描述元素。这个 descriptor 会通过自己保存 Buffer ID 的方式，将自己和对应的缓冲区绑定在一起。
-- 然后 driver 会通知 device。当处理完这个缓冲区之后，device 会向 descriptor ring 中写入 1 个 used device descriptor，并把 Buffer ID 填进这个 descriptor 中，然后再发送一个 used event notification。
-- descriptor ring 通过回环的方式工作：driver 按次序写入 descriptor。在写到 ring 的尾部之后，下一个 descriptor 又被写到 ring 的头部。一旦 ring 被写满了，driver 就停止发送新的请求，然后等待 device 处理 descriptor，并把 descriptor 标记成 used 状态，driver 就又能获得新的 descriptor 使用。
-- 同样的，device 按顺序从 ring 中读取 descriptor，同时侦测 descriptor 是否被标记成 available 状态。等处理完 descriptor 之后，device 又会将 used descriptor 写回到 ring 中。
-- 注意：在 device 读取到 driver 提供的 descriptor时，device 可能不会按原来的顺序处理这些 descriptor。当 device 写 used descriptor 时，它会严格按照自己完成的顺序去写。
+- 缓冲区包含 0 个或者更多的设备可读的，物理 [地址] 连续的元素，并且这些元素后面紧跟着 0 个或者更多的物理 [地址] 连续的设备可写的元素（每个缓冲区至少包含一个元素）。
+- 当驱动想把这样一个缓冲区发送给设备的时候，驱动会向 Descriptor Ring 中，写入至少 1 个可用描述符，这个描述符会填写该缓冲区的描述元素。这个描述符会通过自己保存 Buffer ID 的方式，将自己和对应的缓冲区绑定在一起。
+- 然后驱动会通知设备。当处理完这个缓冲区之后，设备会向 Descriptor Ring 中写入 1 个已使用设备描述符，并把 Buffer ID 填进这个描述符中，然后再发送一个已使用事件通知。
+- Descriptor Ring 通过回环的方式工作：驱动按顺序向环形缓冲区写入描述符。在写到环形缓冲区的尾部之后，下一个描述符又被写到环形缓冲区的头部。一旦环形缓冲区被写满了，驱动就停止发送新的请求，然后等待设备开始处理描述符，并把描述符标记成已使用状态，驱动就又能获得新的可使用描述符使用。
+- 同样的，设备按顺序从环形缓冲区中读取描述符，同时检查描述符是否被标记成可使用状态。等处理完描述符之后，设备又会将已使用描述符写回到环形缓冲区中。
+- 注意：在读取驱动描述符之后，设备可能不会按原来的顺序处理这些描述符。已使用设备描述符，[可能] 是按照它们完成的顺序被写入的。
+- Device Event Suppression 数据结构，只有设备才能写入。它包含一些为了降低设备事件所准备的信息，例如：发送更少的可用缓冲区通知给设备。
+- Driver Event Suppression 数据结构，只有设备才能读取。它包含一些为了降低驱动事件所准备的信息，例如：发送更少的已使用缓冲区通知给驱动。
 
 ### 2.8.1 driver & device ring 计数器
 - driver 和 device 都会在内部维护一个 single-bit 计数器，该计数器初始值会被设置成 1。
